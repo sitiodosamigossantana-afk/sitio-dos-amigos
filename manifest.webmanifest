@@ -1,0 +1,22 @@
+{
+  "name": "Sítio dos Amigos - Gestão",
+  "short_name": "Sítio Amigos",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#101010",
+  "theme_color": "#101010",
+  "icons": [
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo.jpg",
+      "sizes": "any",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

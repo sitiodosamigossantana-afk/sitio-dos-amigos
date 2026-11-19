@@ -1,0 +1,13 @@
+SÍTIO DOS AMIGOS — VERSÃO 5 (LOGIN SUPABASE)
+
+Esta versão mantém a interface preta, laranja e dourada e acrescenta login individual pelo Supabase.
+
+IMPORTANTE:
+- O login usa o projeto Supabase configurado para este aplicativo e a chave publicável (não é uma chave secreta).
+- Entre com o e-mail e a senha já cadastrados no Supabase Authentication.
+- A função do usuário é lida da tabela public.profiles. O administrador principal já foi promovido para role = admin.
+- Esta versão ainda mantém os dados operacionais locais no aparelho. A sincronização de vendas, estoque, cardápio, clientes e despesas entre celulares será implementada e testada na próxima etapa.
+- Não compartilhe senha, chave secreta (sb_secret_...) ou senha do banco de dados.
+- Para usar em vários celulares, publique os arquivos em uma hospedagem HTTPS. Não basta abrir o ZIP diretamente no Android.
+
+Arquivos: index.html, logo.jpg, manifest.webmanifest, apple-touch-icon.png e sw.js.
