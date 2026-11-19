@@ -90,7 +90,7 @@ footer{position:fixed;bottom:0;left:0;right:0;background:#111111ed;border-top:1p
 <h2>Resumo do dia</h2><div class="grid" id="metrics"></div>
 <div class="section card"><div class="row"><h3>Atalhos</h3><span class="pill" id="today"></span></div><div class="actions"><button onclick="openSale()">＋ Nova venda</button><button class="secondary" onclick="showTab('estoque')">Consultar estoque</button><button class="secondary" onclick="showTab('financeiro')">Fechar caixa</button></div></div>
 <div class="section card"><h3>Últimas vendas</h3><div id="recent"></div></div>
-<div class="notice" id="roleNotice">Perfil Administrador: acesso completo.</div><div class="notice" style="margin-top:8px">Login individual conectado ao Supabase. Nesta etapa, os dados operacionais ainda ficam neste aparelho; a sincronização entre celulares será ativada na próxima etapa.</div>
+<div class="notice" id="roleNotice">Perfil Administrador: acesso completo.</div><div class="notice" style="margin-top:8px">Login individual e dados compartilhados conectados ao Supabase. As alterações sincronizam entre os aparelhos conectados.</div>
 </section>
 <section id="vendas" class="page hidden"><div class="row"><h2>Registrar venda</h2><button onclick="openSale()">＋ Nova venda</button></div><div class="card"><div class="formgrid"><label>Buscar venda/produto<input id="saleSearch" placeholder="Digite para filtrar" oninput="renderSales()"></label></div><div id="salesList"></div></div></section>
 <section id="estoque" class="page hidden"><div class="row"><h2>Controle de estoque</h2><button onclick="addStock()">＋ Item</button></div><div class="notice">Todos os itens começam com quantidade zero. Use “Entrada” para registrar compras e reposições. Ajuste as receitas para definir quanto cada venda consome.</div><div class="card section"><div class="formgrid"><label>Filtrar estoque<input id="stockSearch" placeholder="Nome do item" oninput="renderStock()"></label></div><div id="stockList"></div></div><div class="card section"><h3>Receitas e baixa automática</h3><p class="muted">Configure os insumos consumidos por cada copão. A venda de Gym pergunta o sabor do gelo; Cavalo e Red Label usam gelo de coco.</p><div id="recipeList"></div></div></section>
@@ -122,7 +122,61 @@ const initialMenu=[
 ].map((x,i)=>({id:'m'+i,category:x[0],name:x[1],price:x[2]}));
 const initialStock=[...initialMenu.map(p=>p.name),'Gin','Whisky','Gelo de coco','Gelo saborizado - limão','Gelo saborizado - morango','Gelo saborizado - maracujá','Gelo saborizado - frutas vermelhas'].filter((v,i,a)=>a.indexOf(v)===i).map((name,i)=>({id:'s'+i,name,qty:0,unit:'un'}));
 let db=JSON.parse(localStorage.getItem('sitioDB')||'null')||{menu:initialMenu,stock:initialStock,clients:[],sales:[],expenses:[],recipes:{'Gym':[{stock:'Gin',qty:1},{stock:'@ice',qty:1}],'Cavalo':[{stock:'Whisky',qty:1},{stock:'Gelo de coco',qty:1}],'Red Label':[{stock:'Whisky',qty:1},{stock:'Gelo de coco',qty:1}]},cashOpen:true};
-function save(){localStorage.setItem('sitioDB',JSON.stringify(db));renderAll()}
+function makeUuid(){return crypto.randomUUID()}
+function ensureCloudIds(){for(const list of [db.menu,db.stock,db.clients,db.sales,db.expenses])for(const x of list){if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(x.id||'')))x.id=makeUuid()}}
+let cloudSyncBusy=false,cloudSyncAgain=false;
+async function save(){
+ localStorage.setItem('sitioDB',JSON.stringify(db));renderAll();
+ if(!currentUser)return;
+ if(cloudSyncBusy){cloudSyncAgain=true;return;}
+ cloudSyncBusy=true;
+ try{await saveOperationalData();}
+ catch(e){console.error(e);alert('Os dados foram mantidos neste aparelho, mas não foi possível sincronizar com o banco. Confira a conexão e as permissões do Supabase. Detalhe: '+(e.message||e));}
+ finally{cloudSyncBusy=false;if(cloudSyncAgain){cloudSyncAgain=false;await save();}}
+}
+async function saveOperationalData(){
+ ensureCloudIds();
+ const jobs=[
+  ...(isPrivileged()?[['menu_items',db.menu.map(x=>({id:x.id,name:x.name,category:x.category,price:Number(x.price||0),active:true}))]]:[]),
+  ['stock_items',db.stock.map(x=>({id:x.id,name:x.name,quantity:Number(x.qty||0),unit:x.unit||'un'}))],
+  ['clients',db.clients.map(x=>({id:x.id,name:x.name,nickname:x.nick||'',phone:x.phone||''}))],
+  ['sales',db.sales.filter(x=>!x.created_by||x.created_by===currentUser.id).map(x=>({id:x.id,created_by:x.created_by||currentUser.id,client_id:db.clients.find(c=>c.name===x.client)?.id||null,client_name:x.client||'Consumidor',payment_method:x.payment,total:Number(x.total||0),paid:!!x.paid,items:x.items||[],created_at:x.date||new Date().toISOString()}))],
+  ...(isPrivileged()?[['expenses',db.expenses.map(x=>({id:x.id,created_by:x.created_by||currentUser.id,description:x.name,amount:Number(x.value||0),created_at:x.date||new Date().toISOString()}))]]:[])
+ ];
+ for(const [table,rows] of jobs){if(rows.length){const {error}=await supabaseClient.from(table).upsert(rows,{onConflict:'id'});if(error)throw new Error(table+': '+error.message)}}
+ const menuByName=new Map(db.menu.map(x=>[x.name,x.id]));const stockByName=new Map(db.stock.map(x=>[x.name,x.id]));
+ const recipeRows=[];
+ for(const [menuName,parts] of Object.entries(db.recipes||{}))for(const r of parts){const menuId=menuByName.get(menuName);if(menuId)recipeRows.push({menu_item_id:menuId,stock_item_id:r.stock==='@ice'?null:(stockByName.get(r.stock)||null),quantity:Number(r.qty||0),use_selected_ice:r.stock==='@ice'})}
+ if(isPrivileged()){const {error:delError}=await supabaseClient.from('recipes').delete().not('menu_item_id','is',null);if(delError)throw new Error('recipes: '+delError.message);if(recipeRows.length){const {error}=await supabaseClient.from('recipes').insert(recipeRows);if(error)throw new Error('recipes: '+error.message)}}
+}
+async function loadOperationalData(){
+ const names=['menu_items','stock_items','clients','sales','recipes',...(isPrivileged()?['expenses']:[])];const out={expenses:[]};
+ for(const table of names){const {data,error}=await supabaseClient.from(table).select('*');if(error)throw new Error('Leitura de '+table+': '+error.message);out[table]=data||[]}
+ if(out.menu_items.length)db.menu=out.menu_items.map(x=>({id:x.id,category:x.category||'Outros',name:x.name,price:Number(x.price||0)}));
+ if(out.stock_items.length)db.stock=out.stock_items.map(x=>({id:x.id,name:x.name,qty:Number(x.quantity||0),unit:x.unit||'un'}));
+ db.clients=out.clients.map(x=>({id:x.id,name:x.name,nick:x.nickname||'',phone:x.phone||''}));
+ db.sales=out.sales.map(x=>({id:x.id,date:x.created_at,items:Array.isArray(x.items)?x.items:[],client:x.client_name||'',payment:x.payment_method||'',total:Number(x.total||0),paid:!!x.paid,created_by:x.created_by}));
+ db.expenses=out.expenses.map(x=>({id:x.id,name:x.description,value:Number(x.amount||0),date:x.created_at,created_by:x.created_by}));
+ if(out.menu_items.length){const menuById=new Map(out.menu_items.map(x=>[x.id,x.name]));const stockById=new Map(out.stock_items.map(x=>[x.id,x.name]));const recipes={};for(const r of out.recipes){const mn=menuById.get(r.menu_item_id);if(!mn)continue;(recipes[mn]??=[]).push({stock:r.use_selected_ice?'@ice':(stockById.get(r.stock_item_id)||''),qty:Number(r.quantity||0)})}db.recipes=recipes;}
+ if(!out.menu_items.length){ensureCloudIds();await saveOperationalData();}
+ localStorage.setItem('sitioDB',JSON.stringify(db));
+}
+let realtimeChannel=null,remoteRefreshTimer=null,remoteRefreshBusy=false;
+function startRealtimeSync(){
+ if(realtimeChannel)supabaseClient.removeChannel(realtimeChannel);
+ realtimeChannel=supabaseClient.channel('sitio-operational-sync-'+currentUser.id);
+ for(const table of ['menu_items','stock_items','clients','sales','recipes',...(isPrivileged()?['expenses']:[])]){
+  realtimeChannel=realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table},()=>{
+   if(remoteRefreshTimer)clearTimeout(remoteRefreshTimer);
+   remoteRefreshTimer=setTimeout(async()=>{
+    if(remoteRefreshBusy||!currentUser)return;remoteRefreshBusy=true;
+    try{await loadOperationalData();renderAll();}catch(e){console.error('Falha ao atualizar dados em tempo real:',e);}
+    finally{remoteRefreshBusy=false;}
+   },350);
+  });
+ }
+ realtimeChannel.subscribe(status=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Sincronização em tempo real indisponível:',status);});
+}
 function money(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function showTab(id){if(id==='usuarios'&&!isPrivileged())return;document.querySelectorAll('.page').forEach(x=>x.classList.toggle('hidden',x.id!==id));document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.tab===id));if(id==='usuarios')renderUsers();}
@@ -250,8 +304,10 @@ async function loadUserProfile(user){
   await supabaseClient.auth.signOut();
   showLogin('Este usuário precisa definir uma nova senha antes de usar o aplicativo. Vamos configurar essa etapa com segurança.');return;
  }
- showApp(user);applyRole(profile.role);renderAll();
- document.getElementById('roleNotice').textContent='Acesso autenticado. Perfil: '+(profile.role==='admin'?'Administrador':profile.role==='manager'?'Gerente':'Funcionário')+'.';
+ currentRole=profile.role||'staff';
+ try{await loadOperationalData();}catch(e){await supabaseClient.auth.signOut();showLogin('Não foi possível carregar os dados compartilhados: '+(e.message||e)+'. Verifique a configuração das permissões do banco.');return;}
+ showApp(user);applyRole(profile.role);renderAll();startRealtimeSync();
+ document.getElementById('roleNotice').textContent='Dados sincronizados com o banco. Perfil: '+(profile.role==='admin'?'Administrador':profile.role==='manager'?'Gerente':'Funcionário')+'.';
 }
 async function recoverPassword(){
  const email=document.getElementById('loginEmail').value.trim();
@@ -259,7 +315,7 @@ async function recoverPassword(){
  const {error}=await supabaseClient.auth.resetPasswordForEmail(email);
  showLogin(error?'Não foi possível enviar o e-mail: '+error.message:'Se o e-mail estiver cadastrado, você receberá as instruções para redefinir a senha.');
 }
-async function logoutApp(){await supabaseClient.auth.signOut();currentUser=null;showLogin('Você saiu do aplicativo.');}
+async function logoutApp(){if(realtimeChannel){await supabaseClient.removeChannel(realtimeChannel);realtimeChannel=null;}await supabaseClient.auth.signOut();currentUser=null;showLogin('Você saiu do aplicativo.');}
 document.getElementById('loginForm').addEventListener('submit',handleLogin);
 async function initializeAuth(){
  showLogin();

@@ -1,0 +1,15 @@
+SÍTIO DOS AMIGOS — VERSÃO 6.3 (SINCRONIZAÇÃO)
+
+Esta versão carrega cardápio, estoque, clientes, vendas, receitas e despesas do Supabase após o login e assina alterações em tempo real para atualizar outros aparelhos.
+
+PASSOS:
+1. No Supabase, execute ATUALIZACAO_SUPABASE_REALTIME.sql no SQL Editor. O SQL é idempotente e só habilita a publicação de eventos Realtime para as seis tabelas.
+2. Publique os arquivos desta pasta no GitHub Pages, substituindo os arquivos antigos (mantenha o mesmo projeto/repositório).
+3. Abra o aplicativo em cada aparelho, atualize a página e entre com o usuário correspondente.
+4. Faça primeiro um teste simples com dois aparelhos e dados de teste: altere um item e confira se o outro aparelho atualiza.
+
+IMPORTANTE:
+- O SQL de permissões operacionais enviado anteriormente já foi executado pelo usuário. Não é necessário executá-lo novamente.
+- A sincronização exige que a versão 6.3 do aplicativo seja publicada; executar SQL sozinho não converte o localStorage em banco compartilhado.
+- As políticas antigas e novas ainda precisam de uma revisão de segurança. Antes de usar com dados reais, conferir permissões e testar com contas de administrador, gerente e funcionário.
+- A sincronização em tempo real atualiza os aparelhos conectados. Este primeiro teste não substitui validação de concorrência em alterações simultâneas de estoque.
