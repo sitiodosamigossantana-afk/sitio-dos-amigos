@@ -37,6 +37,9 @@ button.secondary,.btn.secondary{background:#25231f;color:#e4c77e;border:1px soli
 button.danger{background:#492321;color:#ffb0a8;border:1px solid #8b3933}
 button.small{padding:7px 10px;font-size:12px}
 input,select{width:100%;padding:11px;border:1px solid #514638;border-radius:9px;background:#121212;color:#f4f0e8;font:inherit;min-width:0;color-scheme:dark}
+.password-wrap{display:flex;align-items:center;gap:7px}
+.password-wrap input{flex:1;min-width:0}
+.password-toggle{white-space:nowrap;padding:10px 12px;min-width:82px}
 input:focus,select:focus{outline:2px solid #f0781977;border-color:#f07819}
 input::placeholder{color:#857d72}
 label{display:grid;gap:5px;font-size:13px;font-weight:650;color:#d8c8a6}
@@ -66,7 +69,12 @@ footer{position:fixed;bottom:0;left:0;right:0;background:#111111ed;border-top:1p
   <div style="text-align:center;margin-bottom:18px"><h2 style="margin:0 0 6px">Acesso ao aplicativo</h2><div class="muted">Entre com seu e-mail e sua senha individual</div></div>
   <form id="loginForm" class="stack">
    <label>E-mail<input id="loginEmail" type="email" autocomplete="username" required placeholder="seuemail@exemplo.com"></label>
-   <label>Senha<input id="loginPassword" type="password" autocomplete="current-password" required placeholder="Sua senha" minlength="6"></label>
+   <label>Senha
+    <div class="password-wrap">
+     <input id="loginPassword" type="password" autocomplete="current-password" required placeholder="Sua senha" minlength="6">
+     <button class="password-toggle secondary" type="button" id="toggleLoginPassword" aria-label="Mostrar senha" aria-pressed="false" onclick="toggleLoginPassword()">Mostrar</button>
+    </div>
+   </label>
    <button id="loginButton" type="submit">Entrar</button>
    <button class="secondary" type="button" onclick="recoverPassword()">Esqueci minha senha</button>
    <div id="loginMessage" class="notice hidden" role="status"></div>
@@ -76,7 +84,7 @@ footer{position:fixed;bottom:0;left:0;right:0;background:#111111ed;border-top:1p
 </section>
 <main id="appMain" class="hidden">
 <nav class="tabs" id="tabs">
-<button data-tab="inicio" class="active">Início</button><button data-tab="vendas">Vender</button><button data-tab="estoque">Estoque</button><button data-tab="cardapio">Cardápio</button><button data-tab="clientes">Clientes</button><button data-tab="financeiro" id="financeTab">Financeiro</button>
+<button data-tab="inicio" class="active">Início</button><button data-tab="vendas">Vender</button><button data-tab="estoque">Estoque</button><button data-tab="cardapio">Cardápio</button><button data-tab="clientes">Clientes</button><button data-tab="financeiro" id="financeTab">Financeiro</button><button data-tab="usuarios" id="usersTab" class="hidden">Usuários</button>
 </nav>
 <section id="inicio" class="page">
 <h2>Resumo do dia</h2><div class="grid" id="metrics"></div>
@@ -89,6 +97,12 @@ footer{position:fixed;bottom:0;left:0;right:0;background:#111111ed;border-top:1p
 <section id="cardapio" class="page hidden"><div class="row"><h2>Cardápio</h2><button id="addMenuButton" onclick="addMenu()">＋ Produto</button></div><div class="card"><div class="formgrid"><label>Buscar produto<input id="menuSearch" placeholder="Nome ou categoria" oninput="renderMenu()"></label></div><div id="menuList"></div></div></section>
 <section id="clientes" class="page hidden"><div class="row"><h2>Clientes</h2><button onclick="addClient()">＋ Cliente</button></div><div class="card"><div id="clientList"></div></div></section>
 <section id="financeiro" class="page hidden"><h2>Financeiro e fechamento</h2><div class="grid" id="financeMetrics"></div><div class="card section"><h3>Movimentações</h3><div id="financeList"></div></div><div class="card section"><h3>Despesas</h3><div class="formgrid"><label>Descrição<input id="expenseName" placeholder="Ex.: compra de bebidas"></label><label>Valor (R$)<input id="expenseValue" type="number" min="0" step=".01"></label></div><button onclick="addExpense()" style="margin-top:10px">Registrar despesa</button></div><div class="card section"><h3>Backup e dados</h3><div class="actions"><button onclick="backup()">Exportar backup</button><label class="btn secondary">Importar backup<input type="file" accept="application/json" onchange="restore(event)" style="display:none"></label><button class="danger" onclick="resetData()">Apagar dados</button></div></div></section>
+<section id="usuarios" class="page hidden">
+ <div class="row"><h2>Gerenciamento de usuários</h2><button class="secondary small" onclick="renderUsers()">Atualizar</button></div>
+ <div class="notice section">Aprove novos usuários e defina o cargo permitido para sua função. Toda aprovação é registrada no histórico.</div>
+ <div class="card section"><h3>Solicitações pendentes</h3><div id="pendingUsers"><p class="muted">Carregando solicitações...</p></div></div>
+ <div class="card section" id="approvalHistoryCard"><h3>Histórico de aprovações</h3><div id="approvalHistory"><p class="muted">Disponível para administradores.</p></div></div>
+</section>
 </main><footer>Sítio dos Amigos • Controle simples do seu negócio</footer>
 <div id="modal" class="modal hidden"><div class="sheet"><div class="row"><h2 id="modalTitle">Nova venda</h2><button class="secondary small" onclick="closeModal()">Fechar</button></div><div id="modalBody"></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -111,7 +125,7 @@ let db=JSON.parse(localStorage.getItem('sitioDB')||'null')||{menu:initialMenu,st
 function save(){localStorage.setItem('sitioDB',JSON.stringify(db));renderAll()}
 function money(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function showTab(id){document.querySelectorAll('.page').forEach(x=>x.classList.toggle('hidden',x.id!==id));document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.tab===id));}
+function showTab(id){if(id==='usuarios'&&!isPrivileged())return;document.querySelectorAll('.page').forEach(x=>x.classList.toggle('hidden',x.id!==id));document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.tab===id));if(id==='usuarios')renderUsers();}
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 function todayKey(){return new Date().toLocaleDateString('pt-BR')}
 function todaySales(){return db.sales.filter(s=>new Date(s.date).toLocaleDateString('pt-BR')===todayKey())}
@@ -151,9 +165,45 @@ function applyRole(role){
  const notice=document.getElementById('roleNotice');
  if(notice)notice.textContent=currentRole==='staff'?'Funcionário: registra vendas e consulta o estoque, sem editar estoque ou acessar o financeiro.':currentRole==='manager'?'Gerente: pode administrar cardápio, estoque e financeiro.':'Administrador: acesso completo.';
  const addMenuBtn=document.getElementById('addMenuButton');if(addMenuBtn)addMenuBtn.classList.toggle('hidden',!isPrivileged());
+ const usersTab=document.getElementById('usersTab');if(usersTab)usersTab.classList.toggle('hidden',!isPrivileged());
+ const historyCard=document.getElementById('approvalHistoryCard');if(historyCard)historyCard.classList.toggle('hidden',currentRole!=='admin');
  const roleLabel=document.getElementById('accountRole');if(roleLabel)roleLabel.textContent=currentRole==='admin'?'ADMINISTRADOR':currentRole==='manager'?'GERENTE':'FUNCIONÁRIO';
  if(!isPrivileged()&&!document.getElementById('financeiro').classList.contains('hidden'))showTab('inicio');
  renderStock();
+}
+function roleName(role){return role==='admin'?'Administrador':role==='manager'?'Gerente':'Funcionário'}
+async function renderUsers(){
+ if(!isPrivileged())return;
+ const pending=document.getElementById('pendingUsers');
+ if(!pending)return;
+ pending.innerHTML='<p class="muted">Carregando solicitações...</p>';
+ const {data:rows,error}=await supabaseClient.from('profiles').select('id, full_name, role, approval_status, created_at').eq('approval_status','pending').order('created_at',{ascending:true});
+ if(error){pending.innerHTML='<p class="muted">Não foi possível carregar as solicitações. Confira a atualização de permissões do Supabase.</p><p class="muted">'+esc(error.message)+'</p>';return;}
+ if(!rows||!rows.length){pending.innerHTML='<p class="muted">Não há usuários aguardando aprovação.</p>';}else{
+  pending.innerHTML=rows.map(u=>{
+   const options=currentRole==='admin'?'<option value="staff">Funcionário</option><option value="manager">Gerente</option><option value="admin">Administrador</option>':'<option value="staff">Funcionário</option><option value="manager">Gerente</option>';
+   return `<div class="item" style="align-items:flex-start"><div style="min-width:0;flex:1"><b>${esc(u.full_name||'Sem nome informado')}</b><div class="muted">Cadastro: ${new Date(u.created_at).toLocaleString('pt-BR')}</div><div class="muted" style="word-break:break-all">ID: ${esc(u.id)}</div><label style="margin-top:8px">Cargo após aprovação<select id="approveRole_${u.id}">${options}</select></label><button style="margin-top:9px" onclick="approvePendingUser('${u.id}')">Aprovar usuário</button></div></div>`;
+  }).join('');
+ }
+ if(currentRole==='admin')await renderApprovalHistory();
+}
+async function approvePendingUser(userId){
+ if(!isPrivileged())return alert('Sem permissão para aprovar usuários.');
+ const select=document.getElementById('approveRole_'+userId);if(!select)return;
+ const role=select.value;
+ if(currentRole==='manager'&&role==='admin')return alert('Gerentes não podem aprovar administradores.');
+ if(!confirm('Confirma a aprovação deste usuário como '+roleName(role)+'?'))return;
+ const {error}=await supabaseClient.rpc('approve_profile',{p_user_id:userId,p_role:role});
+ if(error){alert('Não foi possível aprovar: '+error.message);return;}
+ alert('Usuário aprovado com sucesso como '+roleName(role)+'.');
+ await renderUsers();
+}
+async function renderApprovalHistory(){
+ const target=document.getElementById('approvalHistory');if(!target||currentRole!=='admin')return;
+ const {data,error}=await supabaseClient.from('profile_approval_history').select('user_id, approved_by, granted_role, approved_at').order('approved_at',{ascending:false}).limit(30);
+ if(error){target.innerHTML='<p class="muted">Não foi possível carregar o histórico: '+esc(error.message)+'</p>';return;}
+ if(!data||!data.length){target.innerHTML='<p class="muted">Nenhuma aprovação registrada ainda.</p>';return;}
+ target.innerHTML=data.map(h=>`<div class="item"><div><b>${roleName(h.granted_role)}</b><div class="muted">Aprovado em ${new Date(h.approved_at).toLocaleString('pt-BR')}</div><div class="muted" style="word-break:break-all">Usuário: ${esc(h.user_id)}</div><div class="muted" style="word-break:break-all">Autorizado por: ${esc(h.approved_by)}</div></div></div>`).join('');
 }
 function showLogin(message=''){
  document.getElementById('loginScreen').classList.remove('hidden');
@@ -166,6 +216,15 @@ function showApp(user){
  document.getElementById('appMain').classList.remove('hidden');
  document.getElementById('accountEmail').textContent=user.email||'';
 }
+function toggleLoginPassword(){
+ const input=document.getElementById('loginPassword');
+ const button=document.getElementById('toggleLoginPassword');
+ const showing=input.type==='password';
+ input.type=showing?'text':'password';
+ button.textContent=showing?'Ocultar':'Mostrar';
+ button.setAttribute('aria-label',showing?'Ocultar senha':'Mostrar senha');
+ button.setAttribute('aria-pressed',String(showing));
+}
 async function handleLogin(event){
  event.preventDefault();
  const button=document.getElementById('loginButton');button.disabled=true;button.textContent='Entrando...';
@@ -177,8 +236,16 @@ async function handleLogin(event){
  await loadUserProfile(data.user);
 }
 async function loadUserProfile(user){
- const {data:profile,error}=await supabaseClient.from('profiles').select('full_name, role, must_change_password').eq('id',user.id).single();
+ const {data:profile,error}=await supabaseClient.from('profiles').select('full_name, role, must_change_password, approval_status').eq('id',user.id).single();
  if(error||!profile){await supabaseClient.auth.signOut();showLogin('Seu perfil ainda não foi encontrado. Confira o cadastro no Supabase e fale comigo antes de continuar.');return;}
+ if(profile.approval_status==='pending'){
+  await supabaseClient.auth.signOut();
+  showLogin('Seu cadastro está aguardando aprovação de um administrador ou gerente. Você poderá entrar após a liberação.');return;
+ }
+ if(profile.approval_status==='rejected'){
+  await supabaseClient.auth.signOut();
+  showLogin('Seu cadastro não foi aprovado. Entre em contato com a administração do Sítio dos Amigos.');return;
+ }
  if(profile.must_change_password){
   await supabaseClient.auth.signOut();
   showLogin('Este usuário precisa definir uma nova senha antes de usar o aplicativo. Vamos configurar essa etapa com segurança.');return;

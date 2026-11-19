@@ -1,0 +1,21 @@
+SÍTIO DOS AMIGOS — ATUALIZAÇÃO 6.2 (APROVAÇÃO DE USUÁRIOS)
+
+O que foi integrado no aplicativo:
+- Nova aba “Usuários”, visível somente para administrador e gerente.
+- Lista de perfis com approval_status = pending.
+- Administrador pode aprovar como funcionário, gerente ou administrador.
+- Gerente pode aprovar como funcionário ou gerente; a opção administrador não aparece.
+- A aprovação chama a função Supabase approve_profile e mostra erros retornados pelo banco.
+- Administradores podem consultar o histórico de aprovações, incluindo usuário, responsável e data.
+- Login bloqueia perfis pendentes ou rejeitados.
+- Os perfis existentes com status aprovado continuam acessando normalmente.
+
+AÇÃO NECESSÁRIA NO SUPABASE:
+O SQL principal informado anteriormente criou a função approve_profile e a tabela profile_approval_history. Para que gerentes possam visualizar a fila de solicitações, execute uma vez o arquivo:
+ATUALIZACAO_SUPABASE_APROVACAO.sql
+
+IMPORTANTE:
+- O aplicativo não cria contas no Supabase Auth; ele gerencia a aprovação de perfis já criados no Auth e registrados em public.profiles pelo gatilho existente.
+- O nome e o UUID são exibidos porque a tabela profiles não possui coluna de e-mail. O e-mail não é consultado no schema auth.
+- A tela usa a coluna approval_status criada pelo SQL principal.
+- Esta versão não altera as políticas RLS das tabelas operacionais (vendas, despesas, estoque etc.).
